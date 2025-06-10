@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Winframe - Anúncio Moderno</title>
+  <style>
+    * {
+      margin: 0; padding: 0; box-sizing: border-box;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #eee;
+    }
+    iframe {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw;
+      height: 100vh;
+      border: none;
+      z-index: 0;
+    }
+    .modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.8);
+      width: 90%;
+      max-width: 420px;
+      background: linear-gradient(135deg, #1c1c1c, #2a2a2a);
+      border-radius: 20px;
+      padding: 28px 30px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.7);
+      z-index: 9999;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      color: #ddd;
+      backdrop-filter: blur(8px);
+      animation: modalShow 0.5s forwards;
+      position: fixed;
+    }
+    .modal::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 20px;
+      background: linear-gradient(120deg, #121212, #333, #222, #111);
+      background-size: 300% 300%;
+      animation: gradientShift 10s ease infinite;
+      opacity: 0.15;
+      z-index: -1;
+    }
+    @keyframes gradientShift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    @keyframes modalShow {
+      from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.8);
+      }
+      to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+    }
+    .modal img {
+      width: 100%;
+      border-radius: 16px;
+      margin-bottom: 22px;
+      box-shadow: 0 0 25px rgba(0,0,0,0.6);
+    }
+    .modal .message {
+      font-size: 17px;
+      text-align: center;
+      line-height: 1.5;
+      margin-bottom: 28px;
+      font-weight: 500;
+      color: #ccc;
+    }
+    .footer {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    .countdown {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 19px;
+      color: #aaa;
+      font-weight: 600;
+    }
+    .close-btn {
+      background: #333;
+      color: #eee;
+      border: none;
+      border-radius: 14px;
+      padding: 12px 26px;
+      font-weight: 700;
+      font-size: 16px;
+      cursor: pointer;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.6);
+      transition: background 0.35s ease, box-shadow 0.35s ease;
+      user-select: none;
+    }
+    .close-btn:hover {
+      background: #555;
+      box-shadow: 0 5px 12px rgba(0,0,0,0.9);
+    }
+  </style>
+</head>
+<body>
+  <iframe src="https://luan-silva-dev-0fc.github.io/StudyTask-web/" allowfullscreen></iframe>
+
+  <div class="modal" id="adModal" aria-modal="true" role="dialog" aria-labelledby="adMessage">
+    <img id="adImage" src="" alt="Anúncio" />
+    <div class="message" id="adMessage"></div>
+    <div class="footer">
+      <div class="countdown" id="countdown">Fechar em 20s</div>
+      <button class="close-btn" id="closeBtn">Fechar anúncio</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
+    import { getFirestore, collection, query, orderBy, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD8Tv1kGl6Upx_iBAB6GBECarj_F38bYG8",
+      authDomain: "studytask-ad7e1.firebaseapp.com",
+      projectId: "studytask-ad7e1",
+      storageBucket: "studytask-ad7e1.firebasestorage.app",
+      messagingSenderId: "62674745069",
+      appId: "1:62674745069:web:895dec52dc9787d0b33ee4",
+      measurementId: "G-4MXD0J65H6"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const modal = document.getElementById('adModal');
+    const closeBtn = document.getElementById('closeBtn');
+    const countdownEl = document.getElementById('countdown');
+    const adImage = document.getElementById('adImage');
+    const adMessage = document.getElementById('adMessage');
+
+    let currentAdId = null;
+    let countdownTimer = null;
+    let countdownSeconds = 20;
+
+    function startCountdown() {
+      countdownSeconds = 20;
+      countdownEl.textContent = `Fechar em ${countdownSeconds}s`;
+      countdownTimer = setInterval(() => {
+        countdownSeconds--;
+        if (countdownSeconds <= 0) {
+          closeModal();
+        } else {
+          countdownEl.textContent = `Fechar em ${countdownSeconds}s`;
+        }
+      }, 1000);
+    }
+
+    function stopCountdown() {
+      if (countdownTimer) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+      }
+    }
+
+    function showAd(id, data) {
+      // Não mostra se já fechou este anúncio antes
+      const closedAd = sessionStorage.getItem('closedAdId');
+      if (closedAd === id) return;
+
+      // Se já está aberto com mesmo anúncio, não reabre
+      if (modal.style.display === 'flex' && currentAdId === id) return;
+
+      currentAdId = id;
+      adImage.src = data.image;
+      adMessage.textContent = data.message;
+      modal.style.display = 'flex';
+
+      startCountdown();
+    }
+
+    function closeModal() {
+      modal.style.display = 'none';
+      stopCountdown();
+      if (currentAdId) {
+        sessionStorage.setItem('closedAdId', currentAdId);
+      }
+    }
+
+    closeBtn.onclick = closeModal;
+
+    // Observa o anúncio mais recente no Firestore
+    const anunciosRef = collection(db, "anuncios");
+    const q = query(anunciosRef, orderBy("timestamp", "desc"), limit(1));
+    onSnapshot(q, (snapshot) => {
+      snapshot.forEach(doc => {
+        showAd(doc.id, doc.data());
+      });
+    });
+  </script>
+</body>
+</html>
